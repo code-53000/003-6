@@ -1,5 +1,5 @@
 import { useEffect, useCallback, useRef } from 'react';
-import { Direction, GameStatus, PassengerType } from '@/types/game';
+import { Direction, GameStatus, PassengerType, GhostFrame } from '@/types/game';
 import { useGameStore } from '@/store/gameStore';
 import {
   INITIAL_SPEED,
@@ -12,6 +12,7 @@ import {
   PASSENGER_SCORES,
   URGENT_PASSENGER_TICKS,
   URGENT_PASSENGER_PENALTY,
+  INITIAL_DIRECTION,
 } from '@/constants/game';
 import { isOutOfBounds, isCollidingWithTrain, isSamePosition, getRandomEmptyPosition } from '@/utils/collision';
 
@@ -39,6 +40,9 @@ export const useGameEngine = () => {
     level,
     score,
     passengersCollected,
+    highScore,
+    bestGhostData,
+    currentPathFrames,
     setDirection,
     setNextDirection,
     setStatus,
@@ -52,6 +56,12 @@ export const useGameEngine = () => {
     incrementPassengersCollected,
     decrementStationTicks,
     resetGame,
+    addCurrentPathFrame,
+    setBestGhostData,
+    setGhostTrain,
+    setGhostDirection,
+    setGhostFrameIndex,
+    advanceGhostFrame,
   } = useGameStore();
 
   const gameLoopRef = useRef<number | null>(null);
@@ -106,6 +116,33 @@ export const useGameEngine = () => {
     }
   }, [station, score, setScore, setStation]);
 
+  const recordFrame = useCallback(() => {
+    const activeDir = nextDirection || direction;
+    const frame: GhostFrame = {
+      train: train.map((segment) => ({ ...segment })),
+      direction: activeDir,
+    };
+    addCurrentPathFrame(frame);
+  }, [train, direction, nextDirection, addCurrentPathFrame]);
+
+  const updateGhostData = useCallback(() => {
+    if (score > highScore && currentPathFrames.length > 0) {
+      setBestGhostData({
+        score,
+        frames: currentPathFrames,
+      });
+    }
+  }, [score, highScore, currentPathFrames, setBestGhostData]);
+
+  const initGhostPlayback = useCallback(() => {
+    if (bestGhostData && bestGhostData.frames.length > 0) {
+      const firstFrame = bestGhostData.frames[0];
+      setGhostTrain(firstFrame.train);
+      setGhostDirection(firstFrame.direction);
+      setGhostFrameIndex(0);
+    }
+  }, [bestGhostData, setGhostTrain, setGhostDirection, setGhostFrameIndex]);
+
   const moveTrain = useCallback(() => {
     if (nextDirection) {
       setDirection(nextDirection);
@@ -123,6 +160,7 @@ export const useGameEngine = () => {
     };
 
     if (isOutOfBounds(newHead) || isCollidingWithTrain(newHead, train, true)) {
+      updateGhostData();
       setStatus(GameStatus.GAME_OVER);
       return;
     }
@@ -146,6 +184,7 @@ export const useGameEngine = () => {
     }
 
     setTrain(newTrain);
+    recordFrame();
 
     if (ateStation && passengersCollected > 0 && (passengersCollected + 1) % PASSENGERS_PER_LEVEL === 0) {
       const newLevel = Math.min(MAX_LEVEL, level + 1);
@@ -169,10 +208,13 @@ export const useGameEngine = () => {
     setTrain,
     setStation,
     incrementPassengersCollected,
+    recordFrame,
+    updateGhostData,
   ]);
 
   const gameTick = useCallback(() => {
     moveTrain();
+    advanceGhostFrame();
     addSmoke();
     removeExpiredSmoke();
 
@@ -180,7 +222,7 @@ export const useGameEngine = () => {
       decrementStationTicks();
       handleUrgentStationTimeout();
     }
-  }, [moveTrain, addSmoke, removeExpiredSmoke, station, decrementStationTicks, handleUrgentStationTimeout]);
+  }, [moveTrain, advanceGhostFrame, addSmoke, removeExpiredSmoke, station, decrementStationTicks, handleUrgentStationTimeout]);
 
   const gameLoop = useCallback(
     (timestamp: number) => {
@@ -222,12 +264,20 @@ export const useGameEngine = () => {
   const startGame = useCallback((initialDirection?: Direction) => {
     if (status === GameStatus.IDLE || status === GameStatus.GAME_OVER) {
       resetGame();
+      const dir = initialDirection || INITIAL_DIRECTION;
       if (initialDirection) {
         setDirection(initialDirection);
       }
+      initGhostPlayback();
       setStatus(GameStatus.PLAYING);
+      const state = useGameStore.getState();
+      const firstFrame: GhostFrame = {
+        train: state.train.map((segment) => ({ ...segment })),
+        direction: dir,
+      };
+      addCurrentPathFrame(firstFrame);
     }
-  }, [status, resetGame, setDirection, setStatus]);
+  }, [status, resetGame, setDirection, setStatus, initGhostPlayback, addCurrentPathFrame]);
 
   const togglePause = useCallback(() => {
     if (status === GameStatus.PLAYING) {

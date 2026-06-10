@@ -1,5 +1,5 @@
 import { create } from 'zustand';
-import { GameState, Direction, GameStatus, TrainSegment, PassengerStation, SmokeParticle, PassengerType, PassengerStats } from '@/types/game';
+import { GameState, Direction, GameStatus, TrainSegment, PassengerStation, SmokeParticle, PassengerType, PassengerStats, GhostFrame, GhostData } from '@/types/game';
 import { INITIAL_DIRECTION, INITIAL_TRAIN_LENGTH, GRID_SIZE } from '@/constants/game';
 
 const createInitialTrain = (): TrainSegment[] => {
@@ -24,7 +24,7 @@ const createInitialPassengerStats = (): PassengerStats => ({
   [PassengerType.FAT]: 0,
 });
 
-const getInitialState = (): Omit<GameState, 'highScore'> => ({
+const getInitialState = (): Omit<GameState, 'highScore' | 'bestGhostData'> => ({
   score: 0,
   level: 1,
   status: GameStatus.IDLE,
@@ -35,6 +35,10 @@ const getInitialState = (): Omit<GameState, 'highScore'> => ({
   smokeParticles: [],
   passengersCollected: 0,
   passengerStats: createInitialPassengerStats(),
+  ghostTrain: null,
+  ghostDirection: null,
+  ghostFrameIndex: 0,
+  currentPathFrames: [],
 });
 
 interface GameStore extends GameState {
@@ -51,11 +55,19 @@ interface GameStore extends GameState {
   incrementPassengersCollected: (type: PassengerType) => void;
   decrementStationTicks: () => void;
   resetGame: () => void;
+  setGhostTrain: (train: TrainSegment[] | null) => void;
+  setGhostDirection: (direction: Direction | null) => void;
+  setGhostFrameIndex: (index: number) => void;
+  addCurrentPathFrame: (frame: GhostFrame) => void;
+  setBestGhostData: (data: GhostData | null) => void;
+  resetCurrentPathFrames: () => void;
+  advanceGhostFrame: () => void;
 }
 
 export const useGameStore = create<GameStore>((set, get) => ({
   ...getInitialState(),
   highScore: 0,
+  bestGhostData: null,
 
   setDirection: (direction) => set({ direction }),
   setNextDirection: (nextDirection) => set({ nextDirection }),
@@ -95,10 +107,42 @@ export const useGameStore = create<GameStore>((set, get) => ({
     }),
 
   resetGame: () => {
-    const { highScore } = get();
+    const { highScore, bestGhostData } = get();
     set({
       ...getInitialState(),
       highScore,
+      bestGhostData,
     });
   },
+
+  setGhostTrain: (ghostTrain) => set({ ghostTrain }),
+  setGhostDirection: (ghostDirection) => set({ ghostDirection }),
+  setGhostFrameIndex: (ghostFrameIndex) => set({ ghostFrameIndex }),
+
+  addCurrentPathFrame: (frame) =>
+    set((state) => ({
+      currentPathFrames: [...state.currentPathFrames, frame],
+    })),
+
+  setBestGhostData: (bestGhostData) => set({ bestGhostData }),
+
+  resetCurrentPathFrames: () => set({ currentPathFrames: [] }),
+
+  advanceGhostFrame: () =>
+    set((state) => {
+      if (!state.bestGhostData) return {};
+      const nextIndex = state.ghostFrameIndex + 1;
+      if (nextIndex >= state.bestGhostData.frames.length) {
+        return {
+          ghostTrain: null,
+          ghostDirection: null,
+        };
+      }
+      const frame = state.bestGhostData.frames[nextIndex];
+      return {
+        ghostFrameIndex: nextIndex,
+        ghostTrain: frame.train,
+        ghostDirection: frame.direction,
+      };
+    }),
 }));

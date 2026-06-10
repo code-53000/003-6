@@ -47,6 +47,16 @@ export interface PassengerStats {
   [PassengerType.FAT]: number;
 }
 
+export interface GhostFrame {
+  train: TrainSegment[];
+  direction: Direction;
+}
+
+export interface GhostData {
+  score: number;
+  frames: GhostFrame[];
+}
+
 export interface GameState {
   score: number;
   level: number;
@@ -59,4 +69,9 @@ export interface GameState {
   smokeParticles: SmokeParticle[];
   passengersCollected: number;
   passengerStats: PassengerStats;
+  ghostTrain: TrainSegment[] | null;
+  ghostDirection: Direction | null;
+  ghostFrameIndex: number;
+  currentPathFrames: GhostFrame[];
+  bestGhostData: GhostData | null;
 }

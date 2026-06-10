@@ -111,6 +111,8 @@ export const useGameRenderer = (canvasRef: React.RefObject<HTMLCanvasElement>) =
   const smokeParticles = useGameStore((state) => state.smokeParticles);
   const status = useGameStore((state) => state.status);
   const nextDirection = useGameStore((state) => state.nextDirection);
+  const ghostTrain = useGameStore((state) => state.ghostTrain);
+  const ghostDirection = useGameStore((state) => state.ghostDirection);
 
   const animationFrameRef = useRef<number | null>(null);
   const localSmokeRef = useRef<SmokeParticle[]>([]);
@@ -274,6 +276,114 @@ export const useGameRenderer = (canvasRef: React.RefObject<HTMLCanvasElement>) =
     [train, direction, nextDirection, drawTrainHead, drawTrainBody]
   );
 
+  const drawGhostTrainHead = useCallback(
+    (ctx: CanvasRenderingContext2D, segment: TrainSegment, dir: Direction) => {
+      const px = segment.x * CELL_SIZE;
+      const py = segment.y * CELL_SIZE;
+      const size = CELL_SIZE;
+      const padding = 2;
+
+      const headColor = COLORS.GHOST_TRAIN_HEAD;
+      const darkColor = COLORS.GHOST_TRAIN_HEAD_DARK;
+      const windowColor = COLORS.GHOST_TRAIN_WINDOW;
+      const wheelColor = COLORS.GHOST_TRAIN_WHEEL;
+      const chimneyColor = COLORS.GHOST_CHIMNEY;
+
+      drawPixelRect(ctx, px + padding, py + padding, size - padding * 2, size - padding * 2, headColor);
+
+      drawPixelRect(ctx, px + padding, py + size - padding - 6, size - padding * 2, 4, darkColor);
+
+      const innerPad = 6;
+
+      switch (dir) {
+        case Direction.UP:
+          drawPixelRect(ctx, px + size / 2 - 2, py + padding, 4, innerPad, chimneyColor);
+          drawPixelRect(ctx, px + innerPad, py + innerPad + 4, size - innerPad * 2, 8, windowColor);
+          drawPixelRect(ctx, px + padding + 2, py + size - padding - 4, 6, 4, wheelColor);
+          drawPixelRect(ctx, px + size - padding - 8, py + size - padding - 4, 6, 4, wheelColor);
+          break;
+        case Direction.DOWN:
+          drawPixelRect(ctx, px + size / 2 - 2, py + size - padding - innerPad, 4, innerPad, chimneyColor);
+          drawPixelRect(ctx, px + innerPad, py + innerPad, size - innerPad * 2, 8, windowColor);
+          drawPixelRect(ctx, px + padding + 2, py + padding, 6, 4, wheelColor);
+          drawPixelRect(ctx, px + size - padding - 8, py + padding, 6, 4, wheelColor);
+          break;
+        case Direction.LEFT:
+          drawPixelRect(ctx, px + padding, py + size / 2 - 2, innerPad, 4, chimneyColor);
+          drawPixelRect(ctx, px + innerPad + 4, py + innerPad, 8, size - innerPad * 2, windowColor);
+          drawPixelRect(ctx, px + size - padding - 4, py + padding + 2, 4, 6, wheelColor);
+          drawPixelRect(ctx, px + size - padding - 4, py + size - padding - 8, 4, 6, wheelColor);
+          break;
+        case Direction.RIGHT:
+          drawPixelRect(ctx, px + size - padding - innerPad, py + size / 2 - 2, innerPad, 4, chimneyColor);
+          drawPixelRect(ctx, px + innerPad, py + innerPad, 8, size - innerPad * 2, windowColor);
+          drawPixelRect(ctx, px + padding, py + padding + 2, 4, 6, wheelColor);
+          drawPixelRect(ctx, px + padding, py + size - padding - 8, 4, 6, wheelColor);
+          break;
+      }
+    },
+    []
+  );
+
+  const drawGhostTrainBody = useCallback(
+    (ctx: CanvasRenderingContext2D, segment: TrainSegment, index: number) => {
+      const px = segment.x * CELL_SIZE;
+      const py = segment.y * CELL_SIZE;
+      const size = CELL_SIZE;
+      const padding = 3;
+
+      const isEven = index % 2 === 0;
+      const bodyColor = isEven ? COLORS.GHOST_TRAIN_BODY : COLORS.GHOST_TRAIN_BODY_DARK;
+      const darkColor = COLORS.GHOST_TRAIN_BODY_DARK;
+      const windowColor = COLORS.GHOST_TRAIN_WINDOW;
+      const wheelColor = COLORS.GHOST_TRAIN_WHEEL;
+
+      drawPixelRect(ctx, px + padding, py + padding, size - padding * 2, size - padding * 2, bodyColor);
+
+      drawPixelRect(ctx, px + padding, py + size - padding - 5, size - padding * 2, 3, darkColor);
+
+      const windowSize = 6;
+      const windowPad = 8;
+      drawPixelRect(
+        ctx,
+        px + windowPad,
+        py + windowPad,
+        size - windowPad * 2,
+        windowSize,
+        windowColor
+      );
+      drawPixelRect(
+        ctx,
+        px + windowPad,
+        py + size - windowPad - windowSize,
+        size - windowPad * 2,
+        windowSize,
+        windowColor
+      );
+
+      drawPixelRect(ctx, px + padding + 2, py + padding, 5, 3, wheelColor);
+      drawPixelRect(ctx, px + size - padding - 7, py + padding, 5, 3, wheelColor);
+      drawPixelRect(ctx, px + padding + 2, py + size - padding - 3, 5, 3, wheelColor);
+      drawPixelRect(ctx, px + size - padding - 7, py + size - padding - 3, 5, 3, wheelColor);
+    },
+    []
+  );
+
+  const drawGhostTrain = useCallback(
+    (ctx: CanvasRenderingContext2D) => {
+      if (!ghostTrain || !ghostDirection) return;
+
+      ghostTrain.forEach((segment, index) => {
+        if (index === 0) {
+          drawGhostTrainHead(ctx, segment, ghostDirection);
+        } else {
+          drawGhostTrainBody(ctx, segment, index);
+        }
+      });
+    },
+    [ghostTrain, ghostDirection, drawGhostTrainHead, drawGhostTrainBody]
+  );
+
   const drawStation = useCallback(
     (ctx: CanvasRenderingContext2D, station: PassengerStation) => {
       const px = station.x * CELL_SIZE;
@@ -347,6 +457,7 @@ export const useGameRenderer = (canvasRef: React.RefObject<HTMLCanvasElement>) =
     }
 
     drawSmokeParticles(ctx, localSmokeRef.current);
+    drawGhostTrain(ctx);
     drawTrain(ctx);
 
     if (status === GameStatus.IDLE) {
@@ -359,6 +470,7 @@ export const useGameRenderer = (canvasRef: React.RefObject<HTMLCanvasElement>) =
     drawBackground,
     drawStation,
     drawSmokeParticles,
+    drawGhostTrain,
     drawTrain,
     drawIdleHint,
     updateLocalSmoke,
